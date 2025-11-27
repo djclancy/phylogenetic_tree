@@ -2,6 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy
 import random
+import tqdm
+
+
 class Node():    
     def __init__(self, label:int, edge_labels: list):
         self.label = label
@@ -39,7 +42,7 @@ class Node():
                     give_spin = flip*self.spins
                     neighbor.give_spin_and_propagate(give_spin, e.label, tree)
 
-    def magnetize(self, away_from_edge, tree:Tree):
+    def magnetize(self, away_from_edge, tree):
         if self.isLeaf:
             self.magnetizations[away_from_edge] = self.spins
         else:
@@ -107,20 +110,21 @@ class Node():
 
 
 class Edge():
-    def __init__(self, label, vertices: list[tuple], delta:float = 0.05, warmStart:bool = True):
+    def __init__(self, label, vertices: list[tuple], delta:float = 0.05, warmStart:bool = True, C_val:float = .5, c_val:float = 0.25):
         if delta<=0:
             raise Exception("Delta must be positive.")
-        true_ll = 1-2*delta
-        true_ul = 1-delta
-        est_ll = 1-4*delta
-        est_ul = 1-delta/2
+        true_ll = np.float128(1-2*C_val*delta)
+        gap = np.float128(delta*(C_val-c_val)*2)
+        if gap<=0:
+            raise Exception("Parameter space is empty.")
         self.label = label
         self.vertices = vertices
-        self.true_parameter = np.float128(np.random.uniform(true_ll, true_ul))
+        self.true_parameter = true_ll+gap*np.float128(np.random.uniform(0,1))
         if warmStart:
-            self.estimated_parameter = np.float128(np.random.uniform(est_ll,est_ul))
+            self.estimated_parameter = true_ll+gap*np.float128(np.random.uniform(0,1))
         else:
             self.estimated_parameter = np.float128(0.8)
+        self.upperLimit = 1-c_val*delta*2
         
         self.delta = delta
         self.warmstart = warmStart
@@ -134,23 +138,25 @@ class Edge():
     def update_parameter(self, Zu,Zv):
         prod = Zu*Zv
         if all(prod>=0):
-            self.estimated_parameter = upperLimit
+            self.estimated_parameter = self.upperLimit
         elif all(prod<=0):
-            self.estimated_parameter = -upperLimit
+            self.estimated_parameter = 1/2
         else:
             f = lambda t: np.mean(prod/(1+t*prod),dtype= np.float128)
-            a = scipy.optimize.bisect(f,-1,1, maxiter = 100)
-            self.estimated_parameter = np.float128(a)
+            if f(-1)*f(1)<0:
+                a = scipy.optimize.bisect(f,-1,1, maxiter = 100)
+                self.estimated_parameter = np.float128(a)
 
 
 class Tree():
-    def __init__(self, vertices:dict, edges:dict,root:int, n_samples:int, delta:float = 0.05, warmStart:bool = True):
+    def __init__(self, vertices:dict, edges:dict,root:int, n_samples:int, delta:float = 0.05, 
+                 warmStart:bool = True, C_val:float = .5, c_val:float = 0.25):
         if root not in vertices:
             raise Exception("Root is not a vertex.")
         
         self.edges = dict()
         for e,inc_vert in edges.items():
-            self.edges[e] = Edge(e, inc_vert,delta, warmStart)
+            self.edges[e] = Edge(e, inc_vert,delta, warmStart, C_val, c_val)
             for v in inc_vert:
                 if v not in vertices:
                     raise Exception("Incident vertices not included in vertex dict.")
@@ -165,7 +171,7 @@ class Tree():
         self.root = root
 
         self.root_vertex = self.vertices[root]
-
+        self.number_update_rounds = 0
         self.generate_spins(n_samples)
 
 
@@ -192,7 +198,9 @@ class Tree():
             
     def update_round(self, orders = [1]):
         error = [[] for _ in orders]
-        for e in self.edges.keys():
+        self.number_update_rounds+=1
+        print(f"Round {self.number_update_rounds} progress:")
+        for e in tqdm.tqdm(self.edges.keys()):
             self.coordinate_update(e)
             error_list = self.get_gaps(orders)
             for p,e in enumerate(error_list):
@@ -216,7 +224,8 @@ class Tree():
 
     
 
-def UniformTree(n_leaves, n_samples = 100, delta:float = 0.05, warmStart:bool =  True):
+def UniformTree(n_leaves, n_samples = 100, delta:float = 0.05,
+                 warmStart:bool =  True, C_val:float = 0.5, c_val:float = 0.25):
     """
     Generates a uniform binary tree and returns a Tree() object for coordinate updates.
     """
@@ -246,25 +255,29 @@ def UniformTree(n_leaves, n_samples = 100, delta:float = 0.05, warmStart:bool = 
     vertices[root] = [edge_label]
     vertices[r].append(edge_label)
     edges[edge_label] = [root, r]
-    tree = Tree(vertices, edges, root, n_samples, delta, warmStart)
+    tree = Tree(vertices, edges, root, n_samples, delta, warmStart, C_val, c_val)
     return (tree, edges, vertices, root)
 
 
 
 class MagNode():
-    def __init__(self, label , leftNode = None, rightNode = None, delta:float = 0.05):
-        lowerLimit = 1-2*delta
-        upperLimit = 1-2*delta
+    def __init__(self, label , leftNode = None, rightNode = None,
+                 delta:float = 0.05, C_val:float = 0.5, c_val:float = 0.25):
+        
+        lowerLimit = np.float128(1-2*C_val*delta)
+        gap = np.float128(2*delta*(C_val - c_val))
+        if gap<=0:
+            raise Exception('Parameter space is not well-defined.')
         self.node = label
         if leftNode is not None:
             if rightNode is None:
                 raise Exception('Only left child is defined.')
             self.leftChild = leftNode
-            self.leftEsimate = np.random.uniform(lowerLimit,upperLimit)
-            self.leftParam = np.random.uniform(lowerLimit,upperLimit)
+            self.leftEsimate = lowerLimit +  gap * np.float128(np.random.uniform(0,1))
+            self.leftParam = lowerLimit +  gap * np.float128(np.random.uniform(0,1))
             self.rightChild = rightNode
-            self.rightEsimate = np.random.uniform(lowerLimit,upperLimit)
-            self.rightParam = np.random.uniform(lowerLimit,upperLimit)
+            self.rightEsimate = lowerLimit +  gap * np.float128(np.random.uniform(0,1))
+            self.rightParam = lowerLimit +  gap * np.float128(np.random.uniform(0,1))
             self.isLeaf = False
         else:
             if rightNode is not None:
@@ -308,16 +321,16 @@ class MagNode():
         self.magnetize()
         return self.magnetizations
 
-def kingmanTree(numberLeaves):
+def UniformMagTree(numberLeaves, delta:float = 0.05, C_val:float= 0.5, c_val:float = 0.25):
     """
     Generates a uniform rooted binary tree by the Kingman coalescent.
     """
-    leafs = {i:MagNode(i) for i in range(numberLeaves)}
+    leafs = {i:MagNode(i, delta = delta, C_val = C_val, c_val = c_val) for i in range(numberLeaves)}
     nextLabel = numberLeaves
     while len(leafs)>=2:
         keys = list(leafs.keys())
         l,r = random.sample(keys,2)
-        leafs[nextLabel] = MagNode(nextLabel, leafs[l], leafs[r])
+        leafs[nextLabel] = MagNode(nextLabel, leafs[l], leafs[r], delta = delta, C_val = C_val, c_val = c_val)
         leafs.pop(l)
         leafs.pop(r)
         nextLabel+=1
