@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import scipy
 import random
 import tqdm
+import random
 
 
 class Node():    
@@ -45,7 +46,7 @@ class Node():
     def magnetize(self, away_from_edge, tree):
         if self.isLeaf:
             self.magnetizations[away_from_edge] = self.spins
-        else:
+        elif len(self.edges) == 3:
             other_edges = [e for e in self.edges if e!=away_from_edge]
             e1,e2 = other_edges[0], other_edges[1]
             e1,e2 = tree.edges[e1], tree.edges[e2]
@@ -63,48 +64,102 @@ class Node():
             Z1, Z2 = v1.magnetizations[e1.label], v2.magnetizations[e2.label]
 
             self.magnetizations[away_from_edge] = q(theta1*Z1,theta2*Z2)    
+        else:
+            other_edges = [e for e in self.edges if e!=away_from_edge]
+            q = np.vectorize(lambda x,y: (x+y)/(1+x*y))
+            Z = np.zeros_like(self.spins)
 
+            for e in other_edges:
+                edge_in_tree = tree.edges[e]
+                vert = edge_in_tree.other_neighbor(self.label)
+                vert_in_tree = tree.vertices[vert]
+                theta = edge_in_tree.estimated_parameter
+                if vert_in_tree.magnetization[e] is None:
+                    vert_in_tree.magnetize(e, tree)
+                Z = q(Z, theta*vert_in_tree.magnetization[e])
+            self.magnetizations[away_from_edge] = Z
 
     def update_magnetization(self, included_edge, tree):
+        """
+        Updates the magnetization once an estimated paramter in a descendent subtree is updated.
+        If self.label = v and the included_edge is {u,v} then this updates the magnetizations at
+        v whenever we delete any of the edges incident to v that are not included_edge.
+        """
         if not self.isLeaf:
-            other_edges = [e for e in self.edges if e!=included_edge]
+            if len(self.edges)==3:
+                other_edges = [e for e in self.edges if e!=included_edge]
 
-            ## Get other edges
+                ## Get other edges
 
-            e1, e2 = other_edges[0], other_edges[1]
-            e1, e2 = tree.edges[e1], tree.edges[e2]
-            
-            
-            ## Get updated magnetization
-            e0 = tree.edges[included_edge]
-            u = e0.other_neighbor(self.label)
-            u = tree.vertices[u]
-            theta_u = e0.estimated_parameter
-            Z_u = u.magnetizations[included_edge]
+                e1, e2 = other_edges[0], other_edges[1]
+                e1, e2 = tree.edges[e1], tree.edges[e2]
+                
+                
+                ## Get updated magnetization
+                e0 = tree.edges[included_edge]
+                u = e0.other_neighbor(self.label)
+                u = tree.vertices[u]
+                theta_u = e0.estimated_parameter
+                Z_u = u.magnetizations[included_edge]
 
-            ## Get magnetization from other neighbors
-            v1, v2 = e1.other_neighbor(self.label), e2.other_neighbor(self.label)
-            v1, v2 = tree.vertices[v1], tree.vertices[v2]
+                ## Get magnetization from other neighbors
+                v1, v2 = e1.other_neighbor(self.label), e2.other_neighbor(self.label)
+                v1, v2 = tree.vertices[v1], tree.vertices[v2]
 
-            theta1,theta2 = e1.estimated_parameter, e2.estimated_parameter
-            if v1.magnetizations[e1.label] is None:
-                v1.magnetize(e1.label, tree)
-            if v2.magnetizations[e2.label] is None:
-                v2.magnetize(e2.label, tree)
-            Z1, Z2 = v1.magnetizations[e1.label], v2.magnetizations[e2.label]
+                theta1,theta2 = e1.estimated_parameter, e2.estimated_parameter
+                if v1.magnetizations[e1.label] is None:
+                    v1.magnetize(e1.label, tree)
+                if v2.magnetizations[e2.label] is None:
+                    v2.magnetize(e2.label, tree)
+                Z1, Z2 = v1.magnetizations[e1.label], v2.magnetizations[e2.label]
 
-            q = np.vectorize(lambda x,y: (x+y)/(1+x*y))
+                q = np.vectorize(lambda x,y: (x+y)/(1+x*y))
 
-            ## Update magnetization for self
+                ## Update magnetization for self
 
-            self.magnetizations[e1.label] = q(theta2*Z2, theta_u*Z_u)
-            self.magnetizations[e2.label] = q(theta1*Z1, theta_u*Z_u)
+                self.magnetizations[e1.label] = q(theta2*Z2, theta_u*Z_u)
+                self.magnetizations[e2.label] = q(theta1*Z1, theta_u*Z_u)
 
-            ## Propogate
+                ## Propogate
 
-            v1.update_magnetization(e1.label, tree)
-            v2.update_magnetization(e2.label, tree)
+                v1.update_magnetization(e1.label, tree)
+                v2.update_magnetization(e2.label, tree)
+            else:
+                other_edges = [e for e in self.edges if e!=included_edge]
+                ## Get updated magnetization at vertex u
+                e0 = tree.edges[included_edge]
+                u = e0.other_neighbor(self.label)
+                u = tree.vertices[u]
+                theta_u = e0.estimated_parameter
+                Z_u = u.magnetizations[included_edge]
 
+                q = np.vectorize(lambda x,y: (x+y)/(1+x*y))
+                ## Eventual magnetization at self.magentization[---]
+                Z = theta_u*Z_u
+                
+                ## Compute magnetizations away from each other_edges
+                other_mags = {e:Z for e in other_edges}
+                for e in other_edges:
+                    edge_in_tree = tree.edges[e]
+                    vert = edge_in_tree.other_neighbor(self.label)
+                    vert_in_tree = tree.vertices[vert]
+                    theta = edge_in_tree.estimated_paramter
+                    if vert_in_tree.magnetizations[e] is None:
+                        vert_in_tree.magnetize(e, tree)
+                    mag_at_other_neighbor = vert_in_tree.magnetizaions[included_edge]
+                    for edge, mag in other_mags.items():
+                        if edge != e:
+                            other_mags[edge] = q(mag, mag_at_other_neighbor)
+
+                ## Update and propogate
+                for edge, mag in other_mags.items():
+                    # Update
+                    self.magnetizations[edge] = mag
+                    # Propogate
+                    edge_in_tree = tree.edges[edge]
+                    vert = edge_in_tree.other_neighbor(self.label)
+                    vert_in_tree = tree.vertices[vert]
+                    vert_in_tree.update_magnetizatoin(edge, tree)                    
 
 
 
@@ -135,17 +190,23 @@ class Edge():
             v = [n for n in self.vertices if n!= nei]
             return v[0]
 
-    def update_parameter(self, Zu,Zv):
+    def update_parameter(self, Zu,Zv, update_rule:str = 'max', learning_rate:float = 0.01):
         prod = Zu*Zv
-        if all(prod>=0):
-            self.estimated_parameter = self.upperLimit
-        elif all(prod<=0):
-            self.estimated_parameter = 1/2
-        else:
-            f = lambda t: np.mean(prod/(1+t*prod),dtype= np.float128)
-            if f(-1)*f(1)<0:
-                a = scipy.optimize.bisect(f,-1,1, maxiter = 100)
-                self.estimated_parameter = np.float128(a)
+        if update_rule=='max':
+            ## Coordinate maximization
+            if all(prod>=0):
+                self.estimated_parameter = self.upperLimit
+            elif all(prod<=0):
+                self.estimated_parameter = 1/2
+            else:
+                f = lambda t: np.mean(prod/(1+t*prod),dtype= np.float128)
+                if f(-1)*f(1)<0:
+                    a = scipy.optimize.bisect(f,-1,1, maxiter = 100)
+                    self.estimated_parameter = np.float128(a)
+        elif update_rule == 'gradient':
+            ## Gradient ascent
+            grad = np.mean(prod, dtype = np.float128)
+            self.estimated_parameter += grad*learning_rate
 
 
 class Tree():
@@ -179,7 +240,8 @@ class Tree():
         self.root_vertex.generate_spins(numSamples, self)
     
 
-    def coordinate_update(self, edge_label):
+    def coordinate_update(self, edge_label, update_rule:str = 'max',learning_rate:float = 0.01):
+        ## Get Magnetizatoins
         u, v = self.edges[edge_label].vertices
         u, v = self.vertices[u], self.vertices[v]
         if u.magnetizations[edge_label] is None:
@@ -188,24 +250,27 @@ class Tree():
             v.magnetize(edge_label, self)
         Zu, Zv = u.magnetizations[edge_label], v.magnetizations[edge_label]
         
+        
         ### Update theta
 
-        self.edges[edge_label].update_parameter(Zu,Zv)
+        self.edges[edge_label].update_parameter(Zu,Zv, update_rule, learning_rate)
 
         #### Proogate
         u.update_magnetization(edge_label,self)
         v.update_magnetization(edge_label, self)
-            
-    def update_round(self, orders = [1]):
+
+
+    def update_round(self, orders = [1], update_rule:str = 'max', learning_rate:float = 0.01):
         error = [[] for _ in orders]
         self.number_update_rounds+=1
         print(f"Round {self.number_update_rounds} progress:")
         for e in tqdm.tqdm(self.edges.keys()):
-            self.coordinate_update(e)
+            self.coordinate_update(e, update_rule, learning_rate)
             error_list = self.get_gaps(orders)
             for p,e in enumerate(error_list):
                 error[p].append(e)
         return error
+    
     
 
     def get_gaps(self, orders = [2]):
@@ -223,42 +288,6 @@ class Tree():
 
 
     
-
-def UniformTree(n_leaves, n_samples = 100, delta:float = 0.05,
-                 warmStart:bool =  True, C_val:float = 0.5, c_val:float = 0.25):
-    """
-    Generates a uniform binary tree and returns a Tree() object for coordinate updates.
-    """
-    vertices = {j+1: [] for j in range(n_leaves)}
-    leafs = {j+1 for j in range(n_leaves)}
-    edges = {}
-    root = 0
-    next_label = n_leaves+1
-    edge_label = 1
-    while len(leafs)>=2:
-        keys = list(leafs)
-        l,r = random.sample(keys,2)
-        vertices[next_label] = [edge_label, edge_label+1]
-        vertices[l].append(edge_label)
-        vertices[r].append(edge_label+1)
-
-        edges[edge_label] = [next_label, l]
-        edges[edge_label+1] = [next_label, r]
-
-
-        leafs.remove(l)
-        leafs.remove(r)
-        leafs.add(next_label)
-        next_label+=1
-        edge_label+=2
-    r = list(leafs)[0]
-    vertices[root] = [edge_label]
-    vertices[r].append(edge_label)
-    edges[edge_label] = [root, r]
-    tree = Tree(vertices, edges, root, n_samples, delta, warmStart, C_val, c_val)
-    return (tree, edges, vertices, root)
-
-
 
 class MagNode():
     def __init__(self, label , leftNode = None, rightNode = None,
@@ -321,6 +350,65 @@ class MagNode():
         self.magnetize()
         return self.magnetizations
 
+class GenMagNode():
+    def __init__(self, label:int, children:list, 
+                 delta:float = 0.05, C_val:float = 0.5, c_val:float = 0.25):
+        lowerLimit = np.float128(1-2*C_val*delta)
+        gap = np.float128(2*delta*(C_val - c_val))
+        self.lower_limit = lowerLimit
+        self.gap = gap
+        if gap<=0:
+            raise Exception('Parameter space is not well-defined.')
+        self.node = label
+        self.children = children
+        self.trueParameters = [lowerLimit +  gap * np.float128(np.random.uniform(0,1)) for _ in children]
+        self.estParameters = [lowerLimit +  gap * np.float128(np.random.uniform(0,1)) for _ in children]
+        if children:
+            self.isLeaf = False
+        else:
+            self.isLeaf = True
+        self.spins = None
+        self.magnetizations = None
+
+    def add_child(self, child):
+        self.trueParameters.append(self.lower_limit +  self.gap * np.float128(np.random.uniform(0,1)))
+        self.estParameters.append(self.lower_limit +  self.gap * np.float128(np.random.uniform(0,1)))
+        self.children.append(child)
+        self.isLeaf = False
+
+    def generateSpins(self, numberSamples):
+        self.spins = np.ones(shape = (numberSamples,1))
+        self.propogate(self.spins)
+    
+    def propogate(self,signal):
+        signal = np.array(signal)
+        self.spins = signal
+        if not self.isLeaf:
+            for true_param,c in zip(self.trueParameters, self.children):
+                p = (1-true_param)/2
+                flip = 1-2*np.random.binomial(1,p,size = signal.shape)
+                c.propogate(flip*signal)
+        else:
+            self.magnetizations = signal    
+
+    def magnetize(self):
+        if self.magnetizations is None:
+            Z = np.zeros(shape = self.spins.shape)
+            recurse = np.vectorize(lambda x,y:(x+y)/(1+x*y))
+            for theta,c in zip(self.estParameters, self.children):
+                c.magnetize()
+                z_child = c.magnetizations
+                Z = recurse(Z, z_child*theta)
+                c.magnetizations = None
+            self.magnetizations = Z
+            
+    def constructMagnetization(self, numberSamples):
+        self.generateSpins(numberSamples = numberSamples)
+        self.magnetize()
+        return self.magnetizations
+ 
+### Magnetization Trees
+
 def UniformMagTree(numberLeaves, delta:float = 0.05, C_val:float= 0.5, c_val:float = 0.25):
     """
     Generates a uniform rooted binary tree by the Kingman coalescent.
@@ -336,3 +424,168 @@ def UniformMagTree(numberLeaves, delta:float = 0.05, C_val:float= 0.5, c_val:flo
         nextLabel+=1
     node = leafs[nextLabel-1] 
     return node
+
+def FoataFuchs(n:int, delta:float = 0.05, C_val:float = 0.5, c_val:float = 0.25):
+    li = [1+int(np.floor(np.random.uniform(0,n))) for _ in range(n-1)]
+    repeats = []
+    mult_occur = set()
+    no_occur = set(range(1,n+1))
+    for i,k in enumerate(li):
+        if i==0:
+            repeats.append(i)
+            mult_occur.add(k)
+        else:
+            if k in mult_occur:
+                repeats.append(i)
+            else:
+                mult_occur.add(k)
+    repeats.append(n)    
+    no_occur = no_occur.difference(mult_occur)
+    leafs = list(no_occur)
+    leafs.sort()
+    
+
+    nodes = {i:GenMagNode(i,[], delta, C_val, c_val) for i in range(1,n+1)}
+    for i, l in enumerate(leafs):
+        d,u = repeats[i], repeats[i+1]
+        if u<n:
+            path = li[d:u]
+        else:
+            path = li[d:]
+        child = l
+        for parent in path[::-1]:
+            nodes[parent].add_child(nodes[child])
+            child = parent
+    return nodes[li[0]]
+
+
+def GeneralizedFoataFuchs(child_counts:list, delta:float = 0.05, C_val:float = 0.5, c_val:float = 0.25):
+    li = []
+    i = 1
+    for k in child_counts:
+        li.extend([i for _ in range(k)])
+        i+=1
+    random.shuffle(li)
+    n = sum(child_counts)+1
+    repeats = []
+    mult_occur = set()
+    no_occur = set(range(1,n+1))
+    for i,k in enumerate(li):
+        if i==0:
+            repeats.append(i)
+            mult_occur.add(k)
+        else:
+            if k in mult_occur:
+                repeats.append(i)
+            else:
+                mult_occur.add(k)
+    repeats.append(n)    
+    no_occur = no_occur.difference(mult_occur)
+    leafs = list(no_occur)
+    leafs.sort()
+    
+
+    nodes = {i:GenMagNode(i,[], delta, C_val, c_val) for i in range(1,n+1)}
+    for i, l in enumerate(leafs):
+        d,u = repeats[i], repeats[i+1]
+        if u<n:
+            path = li[d:u]
+        else:
+            path = li[d:]
+        child = l
+        for parent in path[::-1]:
+            nodes[parent].add_child(nodes[child])
+            child = parent
+    return nodes[li[0]]
+
+
+### Tree type trees
+
+def UniformTree(n_leaves, n_samples = 100, delta:float = 0.05,
+                 warmStart:bool =  True, C_val:float = 0.5, c_val:float = 0.25):
+    """
+    Generates a uniform binary tree and returns a Tree() object for coordinate updates.
+    """
+    vertices = {j+1: [] for j in range(n_leaves)}
+    leafs = {j+1 for j in range(n_leaves)}
+    edges = {}
+    root = 0
+    next_label = n_leaves+1
+    edge_label = 1
+    while len(leafs)>=2:
+        keys = list(leafs)
+        l,r = random.sample(keys,2)
+        vertices[next_label] = [edge_label, edge_label+1]
+        vertices[l].append(edge_label)
+        vertices[r].append(edge_label+1)
+
+        edges[edge_label] = [next_label, l]
+        edges[edge_label+1] = [next_label, r]
+
+
+        leafs.remove(l)
+        leafs.remove(r)
+        leafs.add(next_label)
+        next_label+=1
+        edge_label+=2
+    r = list(leafs)[0]
+    vertices[root] = [edge_label]
+    vertices[r].append(edge_label)
+    edges[edge_label] = [root, r]
+    tree = Tree(vertices, edges, root, n_samples, delta, warmStart, C_val, c_val)
+    return (tree, edges, vertices, root)
+
+
+def GeneralizedFoataFuchsTree(child_sequence:list, n_samples = 100, delta:float = 0.05,
+                 warmStart:bool =  True, C_val:float = 0.5, c_val:float = 0.25):
+    if 1 in child_sequence:
+        raise TypeError('Tree contains contractable edge. Child sequence contains a 1.')
+    
+    li = []
+    i = 1
+    for k in child_sequence:
+        li.extend([i for _ in range(k)])
+        i+=1
+    random.shuffle(li)
+
+    n = sum(child_sequence)+1
+
+    vertices = {k:[] for k in range(1,n+1)}
+    edges = {k:[] for k in range(1,n)} 
+
+    edge_index = 1
+
+    repeats = []
+    mult_occur = set()
+    no_occur = set(range(1,n+1))
+    for i,k in enumerate(li):
+        if i==0:
+            repeats.append(i)
+            mult_occur.add(k)
+        else:
+            if k in mult_occur:
+                repeats.append(i)
+            else:
+                mult_occur.add(k)
+    repeats.append(n)    
+    no_occur = no_occur.difference(mult_occur)
+    leafs = list(no_occur)
+    leafs.sort()
+
+    for i, l in enumerate(leafs):
+        d,u = repeats[i], repeats[i+1]
+        if u<n:
+            path = li[d:u]
+        else:
+            path = li[d:]
+        child = l
+        for parent in path[::-1]:
+            vertices[child].append(edge_index)
+            vertices[parent].append(edge_index)
+            edges[edge_index] = [child, parent]
+            child = parent
+            edge_index+=1
+    
+    root = li[0]
+    tree = Tree(vertices, edges, root, n_samples, delta, warmStart, C_val, c_val)
+    return (tree, edges, vertices, root)
