@@ -4,7 +4,7 @@ This github repo contains code used to generate simulations for a research proje
 
 The CFN model is a Markov model on trees. Given a tree $T = (V,E)$ and a paramter $\boldsymbol{\theta}\in [-1,1]^{E}$, a spin $\sigma = (\sigma_v;v\in T)$ is generated as follows:
 * Pick a vertex $v\in T$ arbitrariliy (this does not matter).
-* Assign a spin $\sigma_v\in \{-1,1\}$ with probability ${P}_{T,\boldsymbol{\theta}}( \sigma_v = 1) = {P}_{T,\boldsymbol{\theta}}(\sigma_v = -1) = \frac{1}{2}.$
+* Assign a spin $\sigma_v\in \{-1,1\}$ with probability ${P}_{T,\boldsymbol{\theta}}( \sigma_v = 1)={P}_{T,\boldsymbol{\theta}}(\sigma_v = -1)=\frac{1}{2}.$
 * Accross any edge $e = \{x,y\}\in E$, we independtely flip the signal with probability 
 ${P}_{T,\boldsymbol{\theta}}(\sigma_x = \sigma_y | \sigma_y) = \frac{1+\theta_e}{2}\\
 {P}_{T,\boldsymbol{\theta}}(\sigma_x =- \sigma_y | \sigma_y) = \frac{1-\theta_e}{2}.$
