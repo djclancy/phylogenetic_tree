@@ -4,7 +4,7 @@ This github repo contains code used to generate simulations for a research proje
 
 The CFN model is a Markov model on trees. Given a tree $T = (V,E)$ and a paramter $\boldsymbol{\theta}\in [-1,1]^{E}$, a spin $\sigma = (\sigma_v;v\in T)$ is generated as follows:
 * Pick a vertex $v\in T$ arbitrariliy (this does not matter).
-* Assign a spin $\sigma_v\in \{-1,1\}$ with probability ${P}_{T,\boldsymbol{\theta}}\left( \sigma_v = 1\right) = {P}_{T,\boldsymbol{\theta}}\left(\sigma_v = -1\right) = \frac{1}{2}.$
+* Assign a spin $\sigma_v\in \{-1,1\}$ with probability ${P}_{T,\boldsymbol{\theta}}( \sigma_v = 1) = {P}_{T,\boldsymbol{\theta}}(\sigma_v = -1) = \frac{1}{2}.$
 * Accross any edge $e = \{x,y\}\in E$, we independtely flip the signal with probability 
 ${P}_{T,\boldsymbol{\theta}}(\sigma_x = \sigma_y | \sigma_y) = \frac{1+\theta_e}{2}\\
 {P}_{T,\boldsymbol{\theta}}(\sigma_x =- \sigma_y | \sigma_y) = \frac{1-\theta_e}{2}.$
@@ -21,9 +21,9 @@ Key to this analysis was the magnetization for a *rooted* binary tree $T_u$ with
 $Z_u = Z_u^{T_u, \widehat{\boldsymbol{\theta}}}(\sigma_{{L_u}}) = {E}_{\widehat{\boldsymbol{\theta}}}[\sigma_u | \sigma_{{L_u}}]$ is the expected spin at the vertex $u$ (computed with the parameter ${\widehat{\boldsymbol{\theta}}}$) given the spins at the leaves $L_u$ generated under the true distribution $\sigma\sim {P}_{T_u,\boldsymbol{\theta}^*}$. 
 
 It turns out that when estimate $\widehat{\boldsymbol{\theta}}$ is close to true parameter $\boldsymbol{\theta}^*$ then $Z_u \approx \sigma_u$. Namely, if 
-$\theta_e^*, \widehat{\theta}_e\in \left[1-\frac{1}{2}\delta, 1-\frac{1}{4}\delta\right]\qquad \forall e\in E$
+$\theta_e^*, \widehat{\theta}_e\in [1-\frac{1}{2}\delta, 1-\frac{1}{4}\delta]\qquad \forall e\in E$
 then
-${P}_{\boldsymbol{\theta}^*}\left(\sigma_u Z_u^{\widehat{\boldsymbol{\theta}}} \ge 1-\frac{121}{5} \delta^2\right) \ge 1-\frac{7}{2}\delta$ for all trees $T$ and all $\delta\in(0, 1/924]$. 
+${P}_{\boldsymbol{\theta}^*}(\sigma_u Z_u^{\widehat{\boldsymbol{\theta}}} \ge 1-\frac{121}{5} \delta^2) \ge 1-\frac{7}{2}\delta$ for all trees $T$ and all $\delta\in(0, 1/924]$. 
 
 Empirically, this appears to be the case for larger $\delta$ as well. Below is the empirical histogram of of $\sigma_u Z_u$ for 50 thousand simulations on 10 uniformly generated 1000 leaf trees (half a million simulations in total) with $\delta = 0.1$.
 ![Magnetization picture](/images/image1/image1.png)
