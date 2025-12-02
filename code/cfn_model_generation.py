@@ -392,14 +392,17 @@ class GenMagNode():
             self.magnetizations = signal    
 
     def magnetize(self):
-        if self.magnetizations is None:
+        if self.isLeaf:
+            self.magnetizations = self.spins
+        elif self.magnetizations is None:
             Z = np.zeros(shape = self.spins.shape)
             recurse = np.vectorize(lambda x,y:(x+y)/(1+x*y))
             for theta,c in zip(self.estParameters, self.children):
                 c.magnetize()
                 z_child = c.magnetizations
                 Z = recurse(Z, z_child*theta)
-                c.magnetizations = None
+                if not c.isLeaf:
+                    c.magnetizations = None
             self.magnetizations = Z
             
     def constructMagnetization(self, numberSamples):
