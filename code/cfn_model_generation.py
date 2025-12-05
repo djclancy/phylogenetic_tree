@@ -271,7 +271,6 @@ class Tree():
                 error[p].append(e)
         return error
     
-    
 
     def get_gaps(self, orders = [2]):
         true_params = np.array([e.true_parameter for e in self.edges.values()], dtype = np.float128)
@@ -550,6 +549,8 @@ def GeneralizedFoataFuchsTree(child_sequence:list, n_samples = 100, delta:float 
         li.extend([i for _ in range(k)])
         i+=1
     random.shuffle(li)
+    li.append(li[0])
+
 
     n = sum(child_sequence)+1
 

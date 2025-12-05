@@ -13,8 +13,8 @@ from cfn_model_generation import *
 ### Parameters
 n_internal_verts = 200 #Number of internal vertices in the tree
 batch_size = 10000 #Number of spins per batch.
-num_batches = 200 #Number of batches per tree
-tree_types = [2, 3, 4, 5,6,7,8] #Degree types for (d+1)-regular rooted trees
+num_batches = 500 #Number of batches per tree
+tree_types = [2, 3, 4, 5] #Degree types for (d+1)-regular rooted trees
 trials_per_tree = batch_size * num_batches # Trials per tree
 total_trials = trials_per_tree * len(tree_types) # Total number of trials
 delta = 1/10  #Value of delta. Theoretical max is delta = 1/924
@@ -29,7 +29,7 @@ lower_tail_sample_threshold = -c_lowerTail
 upper_tail_probability = 1 - probability_upper_tail_constant*delta
 lower_tail_probability = probability_lower_tail_constant * delta**2
 print(f"The theoretical upper-tail bound is {upper_tail_probability:.4} and lower-tail bound is {lower_tail_probability:.4} for delta = {delta}.")
-num_bins = max(500,int(10/delta))
+num_bins = max(1000,int(10/delta))
 
 
 
@@ -44,8 +44,8 @@ for ind, deg in enumerate(tree_types):
     empircal_count_below_threshold.append(0)
     Z = histograms[ind]
     deg_sequence = [deg for _ in range(n_internal_verts)]
-    root = GeneralizedFoataFuchs(deg_sequence, delta, C_val = C_val, c_val = c_val)
     for i in trange(num_batches):
+        root = GeneralizedFoataFuchs(deg_sequence, delta, C_val = C_val, c_val = c_val)
         attempt = root.constructMagnetization(batch_size)
         root.magnetizations = None
 
@@ -68,5 +68,5 @@ for counts, deg in zip(histograms, tree_types):
     df['histogram_for_'+str(deg+1)+'-regular_tree'] = list(counts)
 
 dataframe = pd.DataFrame(df)
-dataframe.to_csv('../data/magnetization/data.csv')
+dataframe.to_csv('../data/magnetization/data2.csv')
 
