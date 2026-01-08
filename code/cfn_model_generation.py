@@ -207,6 +207,13 @@ class Edge():
             ## Gradient ascent
             grad = np.mean(prod, dtype = np.float128)
             self.estimated_parameter += grad*learning_rate
+        
+        elif update_rule == 'emp_flips':
+            ## Gradient ascent
+            same = sum(prod>=0)
+            diff = sum(prod<0)
+            empiricial_pflip = diff/len(prod)
+            self.estimated_parameter = 1- 2*empiricial_pflip
 
 
 class Tree():
@@ -260,15 +267,22 @@ class Tree():
         v.update_magnetization(edge_label, self)
 
 
-    def update_round(self, orders = [1], update_rule:str = 'max', learning_rate:float = 0.01):
+    def update_round(self, orders = [1], update_rule:str = 'max', learning_rate:float = 0.01, print_progress:bool=True):
         error = [[] for _ in orders]
         self.number_update_rounds+=1
-        print(f"Round {self.number_update_rounds} progress:")
-        for e in tqdm.tqdm(self.edges.keys()):
-            self.coordinate_update(e, update_rule, learning_rate)
-            error_list = self.get_gaps(orders)
-            for p,e in enumerate(error_list):
-                error[p].append(e)
+        if print_progress:
+            print(f"Round {self.number_update_rounds} progress:")
+            for e in tqdm.tqdm(self.edges.keys()):
+                self.coordinate_update(e, update_rule, learning_rate)
+                error_list = self.get_gaps(orders)
+                for p,e in enumerate(error_list):
+                    error[p].append(e)
+        else:
+            for e in self.edges.keys():
+                self.coordinate_update(e, update_rule, learning_rate)
+                error_list = self.get_gaps(orders)
+                for p,e in enumerate(error_list):
+                    error[p].append(e)
         return error
     
 
